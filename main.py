@@ -44,6 +44,48 @@ app.add_middleware(
 
 init_db()
 
+def bootstrap_admin_from_environment():
+    admin_username = os.environ.get(
+        "TRUSTVAULT_ADMIN_USERNAME", ""
+    ).strip()
+    admin_password = os.environ.get(
+        "TRUSTVAULT_ADMIN_PASSWORD", ""
+    )
+
+    if not admin_username and not admin_password:
+        return
+
+    if not admin_username or not admin_password:
+        raise RuntimeError(
+            "Both admin bootstrap environment variables are required."
+        )
+
+    if not 3 <= len(admin_username) <= 40:
+        raise RuntimeError("Admin username must be 3-40 characters.")
+
+    if len(admin_password) < 12:
+        raise RuntimeError("Admin password must be at least 12 characters.")
+
+    db = get_db()
+    try:
+        db.execute(
+            """
+            INSERT INTO users (username, password_hash, role)
+            VALUES (?, ?, 'admin')
+            ON CONFLICT(username) DO UPDATE SET
+                password_hash = excluded.password_hash,
+                role = 'admin'
+            """,
+            (admin_username, hash_password(admin_password))
+        )
+        db.commit()
+    finally:
+        db.close()
+
+
+bootstrap_admin_from_environment()
+
+
 from documents import router as documents_router
 app.include_router(documents_router)
 
